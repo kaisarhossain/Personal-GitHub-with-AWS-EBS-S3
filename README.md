@@ -30,6 +30,16 @@ accessible, improving security posture.
        │
        ▼
     EBS Volume (Persistent Storage)
+       │
+       ▼
+    Backup Script (backup.sh)
+       │
+       ▼
+    Tar Archive
+       │
+       ▼
+Amazon S3 Bucket (s3-gitea-server)
+
 
 ------------------------------------------------------------------------
 
@@ -45,9 +55,7 @@ accessible, improving security posture.
 
 SSH into instance:
 
-``` bash
 ssh -i your-key.pem ubuntu@<PUBLIC-IP>
-```
 
 ------------------------------------------------------------------------
 
@@ -55,45 +63,32 @@ ssh -i your-key.pem ubuntu@<PUBLIC-IP>
 
 Check device:
 
-``` bash
 lsblk
-```
 
 Format (first time only):
 
-``` bash
 sudo mkfs.ext4 /dev/nvme1n1
-```
 
 Create mount point:
 
-``` bash
 mkdir -p /home/ubuntu/data
-```
 
 Mount volume:
 
-``` bash
 sudo mount /dev/nvme1n1 /home/ubuntu/data
-```
 
 Set permissions:
 
-``` bash
 sudo chown -R ubuntu:ubuntu /home/ubuntu/data
-```
 
 Verify:
 
-``` bash
 df -h
-```
 
 ------------------------------------------------------------------------
 
 ## 3. Install Docker (Official Repository)
 
-``` bash
 sudo apt update
 sudo apt install ca-certificates curl gnupg -y
 
@@ -107,26 +102,33 @@ sudo apt update
 sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 
 sudo usermod -aG docker ubuntu
-```
 
 Log out and back in.
 
 Verify:
 
-``` bash
 docker --version
 docker compose version
-```
 
 ------------------------------------------------------------------------
 
-## 4. Project Structure
+## Install AWS CLI v2 (Official Repository)
 
-``` bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+sudo apt install unzip -y
+unzip awscliv2.zip
+sudo ./aws/install
+
+aws --version
+aws s3 ls
+
+------------------------------------------------------------------------
+
+## 5. Project Structure
+
 mkdir ~/gitea-stack
 cd ~/gitea-stack
 mkdir nginx
-```
 
 ------------------------------------------------------------------------
 
@@ -134,7 +136,6 @@ mkdir nginx
 
 Create `docker-compose.yml`:
 
-``` yaml
 services:
   gitea:
     image: gitea/gitea:latest
@@ -163,7 +164,6 @@ services:
 networks:
   gitea-net:
     driver: bridge
-```
 
 ------------------------------------------------------------------------
 
@@ -171,7 +171,6 @@ networks:
 
 Create `nginx/nginx.conf`:
 
-``` nginx
 server {
     listen 80;
     server_name YOUR_PUBLIC_IP;
@@ -184,16 +183,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-```
 
 ------------------------------------------------------------------------
 
 ## 7. Start the Stack
 
-``` bash
 docker compose up -d
 docker ps
-```
 
 Access:
 
@@ -209,19 +205,15 @@ Edit:
 
 Ensure:
 
-``` ini
 [server]
 PROTOCOL = http
 DOMAIN = YOUR_PUBLIC_IP
 ROOT_URL = http://YOUR_PUBLIC_IP/
 HTTP_PORT = 3000
-```
 
 Restart:
 
-``` bash
 docker restart gitea
-```
 
 ------------------------------------------------------------------------
 
@@ -229,71 +221,94 @@ docker restart gitea
 
 ## Backup Script (backup.sh)
 
-``` bash
 #!/usr/bin/env bash
 set -euo pipefail
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 ARCHIVE="/tmp/gitea-backup-${TS}.tar.gz"
 sudo tar -czf "${ARCHIVE}" -C "$HOME/data" .
 echo "Created backup archive: ${ARCHIVE}"
-```
 
 Run:
 
-``` bash
 chmod +x backup.sh
 ./backup.sh
-```
 
 ------------------------------------------------------------------------
 
 ## Upload to S3
 
-``` bash
 aws s3 cp <archive-name>.tar.gz s3://YOUR-BUCKET/backups/
 aws s3 ls s3://YOUR-BUCKET/backups/
-```
 
 ------------------------------------------------------------------------
 
-## Restore Procedure
+## Restore Procedure (EBS)
 
 1.  Stop containers:
 
-``` bash
 docker compose down
-```
 
-2.  Download backup:
+2.  Check URL:
 
-``` bash
-aws s3 cp s3://YOUR-BUCKET/backups/<archive>.tar.gz /tmp/
-```
+curl -I http://<---->
 
-3.  Extract:
+3.  Restart:
 
-``` bash
-sudo tar -xzf /tmp/<archive>.tar.gz -C /home/ubuntu/data
-```
-
-4.  Restart:
-
-``` bash
 docker compose up -d
-```
+
+4.  Check URL:
+
+curl -I http://<---->
 
 5.  Verify repository in browser.
 
 ------------------------------------------------------------------------
 
-# Persistence Test
+# Persistence Test (EBS)
 
-``` bash
 docker compose down
 docker compose up -d
-```
 
 Repository remains intact due to EBS-backed bind mount.
+
+------------------------------------------------------------------------
+
+## Restore Procedure (S3)
+
+1.  Stop containers:
+
+docker compose down
+
+2.  Check URL:
+
+curl -I http://<---->
+
+3.  Download backup:
+
+aws s3 cp s3://YOUR-BUCKET/backups/<archive>.tar.gz /tmp/
+
+4.  Extract:
+
+sudo tar -xzf /tmp/<archive>.tar.gz -C /home/ubuntu/data
+
+5.  Restart:
+
+docker compose up -d
+
+6.  Check URL:
+
+curl -I http://<---->
+
+7.  Verify repository in browser.
+
+------------------------------------------------------------------------
+
+# Persistence Test (S3)
+
+docker compose down
+docker compose up -d
+
+Repository remains intact after S3 restore.
 
 ------------------------------------------------------------------------
 
