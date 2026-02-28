@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    restart: always
+    volumes:
+      - /home/ubuntu/data:/data
+    expose:
+      - "3000"
+    networks:
+      - gitea-net
+
+  nginx:
+    image: nginx:latest
+    container_name: gitea-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - gitea
+    networks:
+      - gitea-net
+
+networks:
+  gitea-net:
+    driver: bridge
+
